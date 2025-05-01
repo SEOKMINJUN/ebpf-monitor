@@ -25,3 +25,11 @@ ebpf-monitor
 *_bpfeb.*
 *_bpfel.*
 
+# object file
+*.o
+
+#vscode files
+.vscode
+
+#user specific file
+include/vmlinux.h
