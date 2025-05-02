@@ -5,54 +5,124 @@
 #include <bpf/bpf_tracing.h>
 #include <bpf/bpf_core_read.h>
 
-#ifndef TASK_COMM_LEN
-#define TASK_COMM_LEN 16
-#endif
-
+#define NAME_SIZE 64
 #define MAX_SIZE 128
 
 char __license[] SEC("license") = "Dual MIT/GPL";
 
-struct processCreateEvent {
+struct createEvent {
 	u32 pid;
 	u32 uid;
-	u8 name[MAX_SIZE];
-	u32 len;
-	u8 comm[TASK_COMM_LEN];
+	u32 ppid;
+	u8 name[NAME_SIZE];
+	u8 comm[MAX_SIZE];
+	u8 argv[10][128];
+	u8 envp[10][128];
+	u32 flags;
 };
 
 struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
 	__uint(max_entries, 1 << 24);
-	__type(value, struct processCreateEvent);
-} events SEC(".maps");
+	__type(value, struct createEvent);
+} createRingBuffer SEC(".maps");
 
+
+struct terminateEvent {
+	u32 pid;
+	u32 uid;
+	u32 ppid;
+	u32 code;
+	u8 comm[NAME_SIZE];
+};
+
+struct {
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, 1 << 24);
+	__type(value, struct terminateEvent);
+} terminateRingBuffer SEC(".maps");
 
 //ProcessCreate
-// TODO: Fix filename is invalid
-SEC("kprobe/sys_execve")
-// int BPF_KPROBE(kprobe_sys_execve, const char *filename, const char *const *argv, const char *const *envp)
-int kprobe_sys_execve(struct pt_regs *ctx)
+SEC("kprobe/do_execveat_common")
+int kprobe_do_execveat_common(struct pt_regs *ctx)
 {
-	char filename[256];
 	pid_t pid = bpf_get_current_pid_tgid() >> 32;
 	uid_t uid = bpf_get_current_uid_gid() & 0xFFFFFFFF;
+	struct task_struct* task = bpf_get_current_task_btf();
+	if(!task) return 0;
+
+	//Get arguments from function
+	int fd 					= (int)PT_REGS_PARM1_CORE(ctx);
+	struct filename* struct_filename = (struct filename *)PT_REGS_PARM2_CORE(ctx);const char* filename = BPF_CORE_READ(struct_filename, name);
+	const char* const* argv = (const char* const*)PT_REGS_PARM3_CORE(ctx);
+	const char* const* envp = (const char* const*)PT_REGS_PARM4_CORE(ctx);
+	int flags 				= (int)PT_REGS_PARM5_CORE(ctx);
 	
+	//Create event and push it to ringbuffer
+	struct createEvent *event_info;
 
-	struct processCreateEvent *task_info;
-
-	task_info = bpf_ringbuf_reserve(&events, sizeof(struct processCreateEvent), 0);
-	if (!task_info) {
+	event_info = bpf_ringbuf_reserve(&createRingBuffer, sizeof(struct createEvent), 0);
+	if (!event_info) {
 		return 0;
 	}
 
-	task_info->pid = pid;
-	task_info->uid = uid;
-	task_info->len = bpf_probe_read_user_str(task_info->name, sizeof(task_info->name), (const char*)PT_REGS_PARM3(ctx));
-	bpf_get_current_comm(&task_info->comm, sizeof(task_info->comm));
-	bpf_printk("KPROBE ENTRY EXECVE pid = %d, uid = %d, fname = %s\n", pid, uid, (const char*)PT_REGS_PARM2(ctx));
+	event_info->pid = pid;
+	event_info->uid = uid;
+	event_info->ppid = task->parent->pid;
+	bpf_probe_read_str(event_info->name, sizeof(event_info->name), filename);
+	bpf_get_current_comm(&event_info->comm, sizeof(event_info->comm));
 
+	for(int i=0;i<10;i++){
+		void* pointer;
+		bpf_probe_read(&pointer, sizeof(pointer), &argv[i]);
+		if(pointer == NULL){
+		// bpf_printk("KPROBE ENTRY ARGV BREAK arg[%d]\n", i);
+			break;
+		}
+		bpf_probe_read_str(event_info->argv[i], sizeof(event_info->argv[i]), pointer);
+		// bpf_printk("KPROBE ENTRY ARGV pid = %d, arg[%d] = %s\n", pid, i, event_info->argv[i], event_info->name);
+	}
+
+	for(int i=0;i<10;i++){
+		void* pointer;
+		bpf_probe_read(&pointer, sizeof(pointer), &envp[i]);
+		if(pointer == NULL){
+		// bpf_printk("KPROBE ENTRY ENVP BREAK arg[%d]\n", i);
+			break;
+		}
+		bpf_probe_read_str(event_info->envp[i], sizeof(event_info->envp[i]), pointer);
+		// bpf_printk("KPROBE ENTRY ENTRY pid = %d, env[%d] = %s\n", pid, i, event_info->argv[i], event_info->name);
+	}
+
+	event_info->flags = flags;
+
+	// bpf_printk("KPROBE ENTRY EXECVE pid = %d, uid = %d, fname = %s\n", pid, uid, event_info->name);
 	
-	bpf_ringbuf_submit(task_info, 0);
+	bpf_ringbuf_submit(event_info, 0);
     return 0;
+}
+
+SEC("kprobe/do_exit")
+int BPF_KPROBE(kprobe_do_exit, long code)
+{
+	bpf_printk("KPROBE ENTRY PROC_TERM pid = %d", bpf_get_current_pid_tgid() >> 32);
+	pid_t pid = bpf_get_current_pid_tgid() >> 32;
+	uid_t uid = bpf_get_current_uid_gid() & 0xFFFFFFFF;
+	struct task_struct* task = bpf_get_current_task_btf();
+
+	struct terminateEvent *event_info;
+
+	event_info = bpf_ringbuf_reserve(&terminateRingBuffer, sizeof(struct terminateEvent), 0);
+	if (!event_info) {
+		return 0;
+	}
+
+	event_info->pid = pid;
+	event_info->uid = uid;
+	event_info->ppid = task->parent->pid;
+	bpf_get_current_comm(&event_info->comm, sizeof(event_info->comm));
+	event_info->code = code;
+
+	bpf_ringbuf_submit(event_info, 0);
+	return 0;
 }
