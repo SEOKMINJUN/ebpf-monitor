@@ -71,7 +71,6 @@ func ProcessSensorStart(termSignal chan os.Signal, end chan bool) {
 	defer createRingReader.Close()
 
 	// link kprobe to bpf program
-	// do_execveat_common.isra.0 can be found on /proc/kallsyms
 	kp2, err := link.Kprobe("do_exit", objs.KprobeDoExit, nil)
 	if err != nil {
 		log.Fatalf("opening kprobe: %s", err)
