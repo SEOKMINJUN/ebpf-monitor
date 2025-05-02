@@ -6,27 +6,33 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"log"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
+	"golang.org/x/sys/unix"
 )
 
-func FileSensorStart(end chan bool) {
-	start()
-	end <- true
+type fileOpenEvent struct {
+	pid   uint32
+	uid   uint32
+	name  string
+	flags uint32
+	mode  uint16
 }
-func panicf(s string, i ...interface{}) { panic(fmt.Sprintf(s, i...)) }
 
-func start() {
-	// Subscribe to signals for terminating the program.
-	stopper := make(chan os.Signal, 1)
-	signal.Notify(stopper, os.Interrupt, syscall.SIGTERM)
+const (
+	EVENT_TYPE_EXIT      = -1
+	EVENT_TYPE_FILE_OPEN = 0
+)
 
+type ringEvent struct {
+	eventType int32
+	openEvent bpfFileOpenEvent
+}
+
+func FileSensorStart(termSignal chan os.Signal, end chan bool) {
 	// Load pre-compiled programs and maps into the kernel.
 	objs := bpfObjects{}
 	if err := loadBpfObjects(&objs, nil); err != nil {
@@ -40,12 +46,6 @@ func start() {
 	}
 	defer kp.Close()
 
-	// kp2, err := link.Kretprobe("do_unlinkat", objs.DoUnlinkatExit, nil)
-	// if err != nil {
-	// 	log.Fatalf("opening kprobe: %s", err)
-	// }
-	// defer kp2.Close()
-
 	rd, err := ringbuf.NewReader(objs.Events)
 	if err != nil {
 		log.Fatalf("opening ringbuf reader: %s", err)
@@ -55,7 +55,7 @@ func start() {
 	// Close the reader when the process receives a signal, which will exit
 	// the read loop.
 	go func() {
-		<-stopper
+		<-termSignal
 
 		if err := rd.Close(); err != nil {
 			log.Fatalf("closing ringbuf reader: %s", err)
@@ -64,23 +64,59 @@ func start() {
 
 	log.Println("Waiting for events..")
 
-	var event bpfFileOpenEvent
-	for {
-		record, err := rd.Read()
-		if err != nil {
-			if errors.Is(err, ringbuf.ErrClosed) {
-				log.Println("Received signal, exiting..")
-				return
+	eventChan := make(chan ringEvent)
+	go func() {
+		var event bpfFileOpenEvent
+		for {
+			record, err := rd.Read()
+			if err != nil {
+				if errors.Is(err, ringbuf.ErrClosed) {
+					log.Println("Received signal, exiting file sensor..")
+					eventChan <- ringEvent{eventType: EVENT_TYPE_EXIT}
+					return
+				}
+				log.Printf("reading from reader: %s", err)
+				continue
 			}
-			log.Printf("reading from reader: %s", err)
-			continue
-		}
 
-		// Parse the ringbuf event entry into a bpfEvent structure.
-		if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &event); err != nil {
-			log.Printf("parsing ringbuf event: %s", err)
+			// Parse the ringbuf event entry into a bpfEvent structure.
+			if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &event); err != nil {
+				log.Printf("parsing ringbuf event: %s", err)
+				continue
+			}
+
+			eventChan <- ringEvent{eventType: EVENT_TYPE_FILE_OPEN, openEvent: event}
+			// log.Printf("OPEN:: pid: %d, filename = %s, flag = %d, mode = %d\n", event.Pid, unix.ByteSliceToString(event.Name[:]), event.Flags, event.Mode)
+		}
+	}()
+
+	var event ringEvent
+	for {
+		event = <-eventChan
+		switch event.eventType {
+		case EVENT_TYPE_EXIT:
+			end <- true
+			return
+		case EVENT_TYPE_FILE_OPEN:
+			fileOpenEvent := fileOpenEvent_Create(event.openEvent)
+			fileOpenEvent_Handle(fileOpenEvent)
 			continue
 		}
-		// log.Printf("OPEN:: pid: %d, filename = %s, flag = %d, mode = %d\n", event.Pid, unix.ByteSliceToString(event.Name[:]), event.Flags, event.Mode)
 	}
+}
+
+func fileOpenEvent_Create(bpfEvent bpfFileOpenEvent) fileOpenEvent {
+	event := fileOpenEvent{
+		pid:   bpfEvent.Pid,
+		uid:   bpfEvent.Uid,
+		name:  unix.ByteSliceToString(bpfEvent.Name[:]),
+		flags: bpfEvent.Flags,
+		mode:  bpfEvent.Mode,
+	}
+	return event
+}
+
+func fileOpenEvent_Handle(event fileOpenEvent) {
+	log.Printf("FILE_OPEN: pid: %d\t uid: %d\t flags: %d\t mode = %d\t\t name = %s\n",
+		event.pid, event.uid, event.flags, event.mode, event.name)
 }
