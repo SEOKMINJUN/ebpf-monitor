@@ -15,6 +15,7 @@ import (
 )
 
 type tcpConnectEvent struct {
+	ftype   uint32
 	pid     uint32
 	uid     uint32
 	sockfd  uint32
@@ -43,12 +44,21 @@ func TcpSensorStart(termSignal chan os.Signal, end chan bool) {
 	defer objs.Close()
 
 	// link kprobe to bpf program
-	// do_execveat_common.isra.0 can be found on /proc/kallsyms
-	kp, err := link.Kprobe("do_execveat_common.isra.0", objs.KprobeSysAccept, nil)
+	kp, err := link.Kprobe("sys_accept", objs.KprobeSysAccept, nil)
 	if err != nil {
 		log.Fatalf("opening kprobe: %s", err)
 	}
 	defer kp.Close()
+	kp2, err := link.Kprobe("sys_accept4", objs.KprobeSysAccept4, nil)
+	if err != nil {
+		log.Fatalf("opening kprobe: %s", err)
+	}
+	defer kp2.Close()
+	kp3, err := link.Kprobe("tcp_v4_connect", objs.KprobeTcpV4Connect, nil)
+	if err != nil {
+		log.Fatalf("opening kprobe: %s", err)
+	}
+	defer kp3.Close()
 
 	// create RingBuffer reader for do_execveat_common
 	rd, err := ringbuf.NewReader(objs.AcceptRingBuffer)
@@ -116,6 +126,7 @@ func TcpSensorStart(termSignal chan os.Signal, end chan bool) {
 
 func tcpConnectEvent_Create(bpfEvent bpfAcceptEvent) tcpConnectEvent {
 	event := tcpConnectEvent{
+		ftype:   bpfEvent.Type,
 		pid:     bpfEvent.Pid,
 		uid:     bpfEvent.Uid,
 		sockfd:  bpfEvent.Sockfd,
@@ -127,6 +138,6 @@ func tcpConnectEvent_Create(bpfEvent bpfAcceptEvent) tcpConnectEvent {
 }
 
 func tcpConnectEvent_Handle(event tcpConnectEvent) {
-	log.Printf("TCP_CONNECT: pid: %d\t uid: %d\t sockfd: %d\tfamily: %d\t addr[%d] = %s\n",
-		event.pid, event.uid, event.sockfd, event.family, event.addrlen, event.addr)
+	log.Printf("TCP_CONNECT: typd:%d pid: %d\t uid: %d\t sockfd: %d\tfamily: %d\t addr[%d] = %s\n",
+		event.ftype, event.pid, event.uid, event.sockfd, event.family, event.addrlen, event.addr)
 }
