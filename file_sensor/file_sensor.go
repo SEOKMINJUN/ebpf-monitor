@@ -15,11 +15,12 @@ import (
 )
 
 type fileOpenEvent struct {
-	pid   uint32
-	uid   uint32
-	name  string
-	flags uint32
-	mode  uint16
+	TIMESTAMP uint64
+	pid       uint32
+	uid       uint32
+	name      string
+	flags     uint32
+	mode      uint16
 }
 
 const (
@@ -107,11 +108,12 @@ func FileSensorStart(termSignal chan os.Signal, end chan bool) {
 
 func fileOpenEvent_Create(bpfEvent bpfFileOpenEvent) fileOpenEvent {
 	event := fileOpenEvent{
-		pid:   bpfEvent.Pid,
-		uid:   bpfEvent.Uid,
-		name:  unix.ByteSliceToString(bpfEvent.Name[:]),
-		flags: bpfEvent.Flags,
-		mode:  bpfEvent.Mode,
+		TIMESTAMP: bpfEvent.Timestamp,
+		pid:       bpfEvent.Pid,
+		uid:       bpfEvent.Uid,
+		name:      unix.ByteSliceToString(bpfEvent.Name[:]),
+		flags:     bpfEvent.Flags,
+		mode:      bpfEvent.Mode,
 	}
 	return event
 }

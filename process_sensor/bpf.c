@@ -11,6 +11,7 @@
 char __license[] SEC("license") = "Dual MIT/GPL";
 
 struct createEvent {
+	u64 timestamp;
 	u32 pid;
 	u32 uid;
 	u32 ppid;
@@ -29,6 +30,7 @@ struct {
 
 
 struct terminateEvent {
+	u64 timestamp;
 	u32 pid;
 	u32 uid;
 	u32 ppid;
@@ -66,6 +68,7 @@ int kprobe_do_execveat_common(struct pt_regs *ctx)
 		return 0;
 	}
 
+	event_info->timestamp = bpf_ktime_get_ns();
 	event_info->pid = pid;
 	event_info->uid = uid;
 	event_info->ppid = task->parent->pid;
@@ -105,7 +108,7 @@ int kprobe_do_execveat_common(struct pt_regs *ctx)
 SEC("kprobe/do_exit")
 int BPF_KPROBE(kprobe_do_exit, long code)
 {
-	bpf_printk("KPROBE ENTRY PROC_TERM pid = %d", bpf_get_current_pid_tgid() >> 32);
+	// bpf_printk("KPROBE ENTRY PROC_TERM pid = %d", bpf_get_current_pid_tgid() >> 32);
 	pid_t pid = bpf_get_current_pid_tgid() >> 32;
 	uid_t uid = bpf_get_current_uid_gid() & 0xFFFFFFFF;
 	struct task_struct* task = bpf_get_current_task_btf();
@@ -117,11 +120,46 @@ int BPF_KPROBE(kprobe_do_exit, long code)
 		return 0;
 	}
 
+	event_info->timestamp = bpf_ktime_get_ns();
 	event_info->pid = pid;
 	event_info->uid = uid;
 	event_info->ppid = task->parent->pid;
 	bpf_get_current_comm(&event_info->comm, sizeof(event_info->comm));
 	event_info->code = code;
+
+	bpf_ringbuf_submit(event_info, 0);
+	return 0;
+}
+
+
+SEC("tp/sched/sched_process_exit")
+int tp_process_exit(struct trace_event_raw_sched_process_template* ctx) {
+	u64 tid = bpf_get_current_pid_tgid();
+	pid_t pid = tid >> 32;
+	uid_t uid = bpf_get_current_uid_gid() & 0xFFFFFFFF;
+	
+	// Ignore thread exit
+	if((u32)tid != pid)
+		return 0;
+	
+	struct task_struct *task;
+	task = (struct task_struct *)bpf_get_current_task();
+	if(!task)
+		return 0;
+
+	struct terminateEvent *event_info;
+
+	event_info = bpf_ringbuf_reserve(&terminateRingBuffer, sizeof(struct terminateEvent), 0);
+	if (!event_info) {
+		return 0;
+	}
+
+	event_info->timestamp = bpf_ktime_get_ns();
+	event_info->pid = pid;
+	event_info->uid = uid;
+	event_info->ppid = BPF_CORE_READ(task, parent, pid);
+	bpf_get_current_comm(&event_info->comm, sizeof(event_info->comm));
+	event_info->code = BPF_CORE_READ(task, exit_code);
 
 	bpf_ringbuf_submit(event_info, 0);
 	return 0;

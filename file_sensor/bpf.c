@@ -15,6 +15,7 @@
 char __license[] SEC("license") = "Dual MIT/GPL";
 
 struct fileOpenEvent {
+	u64 timestamp;
 	u32 pid;
 	u32 uid;
 	u8 name[MAX_SIZE];
@@ -46,6 +47,7 @@ int BPF_KPROBE(kprobe_do_sys_openat2, int dfd, const char *filename, struct open
 		return 0;
 	}
 
+	task_info->timestamp = bpf_ktime_get_ns();
 	task_info->pid = pid;
 	task_info->uid = uid;
 	bpf_probe_read_str(task_info->name, sizeof(task_info->name), filename);

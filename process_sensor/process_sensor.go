@@ -5,10 +5,10 @@ package process_sensor
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
@@ -16,22 +16,24 @@ import (
 )
 
 type processCreateEvent struct {
-	pid   uint32
-	uid   uint32
-	name  string
-	argv  []string
-	envp  []string
-	flags uint32
-	ppid  uint32
-	pcmd  string
+	TIMESTAMP uint64   `json:"timestamp"`
+	PID       uint32   `json:"pid"`
+	UID       uint32   `json:"uid"`
+	NAME      string   `json:"name"`
+	ARGV      []string `json:"argv"`
+	ENVP      []string `json:"envp"`
+	FLAGS     uint32   `json:"flags"`
+	PPID      uint32   `json:"ppid"`
+	PCMD      string   `json:"pcmd"`
 }
 
 type processTerminateEvent struct {
-	pid  uint32
-	uid  uint32
-	ppid uint32
-	pcmd string
-	code uint32
+	TIMESTAMP  uint64 `json:"timestamp"`
+	PID        uint32 `json:"pid"`
+	UID        uint32 `json:"uid"`
+	PPID       uint32 `json:"ppid"`
+	PCMD       string `json:"pcmd"`
+	RETURNCODE uint32 `json:"returncode"`
 }
 
 const (
@@ -46,7 +48,6 @@ type ringEvent struct {
 	terminateEvent bpfTerminateEvent
 }
 
-// TODO : add prefix to log
 func ProcessSensorStart(termSignal chan os.Signal, end chan bool) {
 	// Load pre-compiled bpf programs and maps into the kernel.
 	objs := bpfObjects{}
@@ -150,47 +151,55 @@ func ProcessSensorStart(termSignal chan os.Signal, end chan bool) {
 
 func processCreateEvent_Create(bpfEvent bpfCreateEvent) processCreateEvent {
 	event := processCreateEvent{
-		pid:   bpfEvent.Pid,
-		uid:   bpfEvent.Uid,
-		flags: bpfEvent.Flags,
-		name:  unix.ByteSliceToString(bpfEvent.Name[:]),
-		ppid:  bpfEvent.Ppid,
-		pcmd:  unix.ByteSliceToString(bpfEvent.Comm[:]),
+		TIMESTAMP: bpfEvent.Timestamp,
+		PID:       bpfEvent.Pid,
+		UID:       bpfEvent.Uid,
+		FLAGS:     bpfEvent.Flags,
+		NAME:      unix.ByteSliceToString(bpfEvent.Name[:]),
+		PPID:      bpfEvent.Ppid,
+		PCMD:      unix.ByteSliceToString(bpfEvent.Comm[:]),
 	}
 	for _, bytes := range bpfEvent.Argv {
 		if bytes[0] == 0 {
 			break
 		}
-		event.argv = append(event.argv, unix.ByteSliceToString(bytes[:]))
+		event.ARGV = append(event.ARGV, unix.ByteSliceToString(bytes[:]))
 	}
 
 	for _, bytes := range bpfEvent.Envp {
 		if bytes[0] == 0 {
 			break
 		}
-		event.envp = append(event.envp, unix.ByteSliceToString(bytes[:]))
+		event.ENVP = append(event.ENVP, unix.ByteSliceToString(bytes[:]))
 	}
 	return event
 }
 
 func processCreateEvent_Handle(event processCreateEvent) {
-	log.Printf("PROCESS_CREATE: pid: %d\t uid: %d\t ppid: %d\tflags: %d\t pcmd = %s\t\t filename = %s\t\t\t\t argv = %s\t envp = %s\n",
-		event.pid, event.uid, event.ppid, event.flags, event.pcmd, event.name, strings.Join(event.argv, " "), strings.Join(event.envp, " "))
+	jsonBytes, err := json.Marshal(&event)
+	if err != nil {
+		log.Fatalf("Failed marshal object: %s", err)
+	}
+	log.Printf("PROCESS_CREATE: %s\n", unix.ByteSliceToString(jsonBytes))
 }
 
 func processTerminateEvent_Create(bpfEvent bpfTerminateEvent) processTerminateEvent {
 	event := processTerminateEvent{
-		pid:  bpfEvent.Pid,
-		uid:  bpfEvent.Uid,
-		code: bpfEvent.Code,
-		ppid: bpfEvent.Ppid,
-		pcmd: unix.ByteSliceToString(bpfEvent.Comm[:]),
+		TIMESTAMP:  bpfEvent.Timestamp,
+		PID:        bpfEvent.Pid,
+		UID:        bpfEvent.Uid,
+		RETURNCODE: bpfEvent.Code,
+		PPID:       bpfEvent.Ppid,
+		PCMD:       unix.ByteSliceToString(bpfEvent.Comm[:]),
 	}
 
 	return event
 }
 
 func processTerminateEvent_Handle(event processTerminateEvent) {
-	log.Printf("PROCESS_TERM: pid: %d\t uid: %d\t ppid: %d\t code: %d\t pcmd: %s\n",
-		event.pid, event.uid, event.ppid, event.code, event.pcmd)
+	jsonBytes, err := json.Marshal(&event)
+	if err != nil {
+		log.Fatalf("Failed marshal object: %s", err)
+	}
+	log.Printf("PROCESS_TERM: %s\n", unix.ByteSliceToString(jsonBytes))
 }

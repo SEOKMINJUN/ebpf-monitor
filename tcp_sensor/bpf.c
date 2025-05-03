@@ -11,7 +11,7 @@
 char __license[] SEC("license") = "Dual MIT/GPL";
 
 struct acceptEvent {
-	u32 type;
+	u64 timestamp;
 	u32 pid;
 	u32 uid;
 	u32 sockfd;
@@ -71,7 +71,7 @@ int kretprobe_tcp_v4_connect(struct pt_regs* ctx)
 		return 0;
 	}
 
-	event_info->type = 2;
+	event_info->timestamp = bpf_ktime_get_ns();
 	event_info->pid = pid;
 	event_info->uid = uid;
 	event_info->family = BPF_CORE_READ(*sk, __sk_common.skc_family);
