@@ -1,6 +1,6 @@
 package tcp_sensor
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 bpf bpf.c -- -I../include -g -DBPF_DEBUG
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 bpf bpf.c -- -I../include -g
 
 import (
 	"bytes"
