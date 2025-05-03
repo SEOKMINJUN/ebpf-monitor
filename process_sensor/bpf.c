@@ -105,31 +105,20 @@ int kprobe_do_execveat_common(struct pt_regs *ctx)
     return 0;
 }
 
-SEC("kprobe/do_exit")
-int BPF_KPROBE(kprobe_do_exit, long code)
-{
-	// bpf_printk("KPROBE ENTRY PROC_TERM pid = %d", bpf_get_current_pid_tgid() >> 32);
-	pid_t pid = bpf_get_current_pid_tgid() >> 32;
-	uid_t uid = bpf_get_current_uid_gid() & 0xFFFFFFFF;
-	struct task_struct* task = bpf_get_current_task_btf();
+struct terminateEvent {
+	u64 timestamp;
+	u32 pid;
+	u32 uid;
+	u32 ppid;
+	u32 code;
+	u8 comm[NAME_SIZE];
+};
 
-	struct terminateEvent *event_info;
-
-	event_info = bpf_ringbuf_reserve(&terminateRingBuffer, sizeof(struct terminateEvent), 0);
-	if (!event_info) {
-		return 0;
-	}
-
-	event_info->timestamp = bpf_ktime_get_ns();
-	event_info->pid = pid;
-	event_info->uid = uid;
-	event_info->ppid = task->parent->pid;
-	bpf_get_current_comm(&event_info->comm, sizeof(event_info->comm));
-	event_info->code = code;
-
-	bpf_ringbuf_submit(event_info, 0);
-	return 0;
-}
+struct {
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, 1 << 24);
+	__type(value, struct terminateEvent);
+} terminateRingBuffer SEC(".maps");
 
 
 SEC("tp/sched/sched_process_exit")

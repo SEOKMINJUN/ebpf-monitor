@@ -72,11 +72,11 @@ func ProcessSensorStart(termSignal chan os.Signal, end chan bool) {
 	defer createRingReader.Close()
 
 	// link kprobe to bpf program
-	kp2, err := link.Kprobe("do_exit", objs.KprobeDoExit, nil)
+	lk, err := link.Tracepoint("sched", "sched_process_exit", objs.TpProcessExit, nil)
 	if err != nil {
-		log.Fatalf("opening kprobe: %s", err)
+		log.Fatalf("linking tracepoint: %s", err)
 	}
-	defer kp2.Close()
+	defer lk.Close()
 
 	// create RingBuffer reader for do_execveat_common
 	terminateRingReader, err := ringbuf.NewReader(objs.TerminateRingBuffer)
@@ -126,6 +126,29 @@ func ProcessSensorStart(termSignal chan os.Signal, end chan bool) {
 			}
 
 			eventChan <- ringEvent{eventType: EVENT_TYPE_PROC_CREATE, createEvent: createEvent}
+		}
+	}()
+	go func() {
+		var terminateEvent bpfTerminateEvent
+		for {
+			record, err := terminateRingReader.Read()
+			if err != nil {
+				if errors.Is(err, ringbuf.ErrClosed) {
+					log.Println("Received signal, exiting process sensor..")
+					eventChan <- ringEvent{eventType: EVENT_TYPE_EXIT}
+					return
+				}
+				log.Printf("reading from reader: %s", err)
+				continue
+			}
+
+			// Parse the ringbuf event entry into a bpfEvent structure.
+			if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &terminateEvent); err != nil {
+				log.Printf("parsing ringbuf event: %s", err)
+				continue
+			}
+
+			eventChan <- ringEvent{eventType: EVENT_TYPE_PROC_TERMINATE, terminateEvent: terminateEvent}
 		}
 	}()
 
