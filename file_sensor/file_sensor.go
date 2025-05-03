@@ -5,6 +5,7 @@ package file_sensor
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"log"
 	"os"
@@ -16,11 +17,11 @@ import (
 
 type fileOpenEvent struct {
 	TIMESTAMP uint64
-	pid       uint32
-	uid       uint32
-	name      string
-	flags     uint32
-	mode      uint16
+	PID       uint32
+	UID       uint32
+	NAME      string
+	FLAGS     uint32
+	MODE      uint16
 }
 
 const (
@@ -109,16 +110,19 @@ func FileSensorStart(termSignal chan os.Signal, end chan bool) {
 func fileOpenEvent_Create(bpfEvent bpfFileOpenEvent) fileOpenEvent {
 	event := fileOpenEvent{
 		TIMESTAMP: bpfEvent.Timestamp,
-		pid:       bpfEvent.Pid,
-		uid:       bpfEvent.Uid,
-		name:      unix.ByteSliceToString(bpfEvent.Name[:]),
-		flags:     bpfEvent.Flags,
-		mode:      bpfEvent.Mode,
+		PID:       bpfEvent.Pid,
+		UID:       bpfEvent.Uid,
+		NAME:      unix.ByteSliceToString(bpfEvent.Name[:]),
+		FLAGS:     bpfEvent.Flags,
+		MODE:      bpfEvent.Mode,
 	}
 	return event
 }
 
 func fileOpenEvent_Handle(event fileOpenEvent) {
-	log.Printf("FILE_OPEN: pid: %d\t uid: %d\t flags: %d\t mode = %d\t\t name = %s\n",
-		event.pid, event.uid, event.flags, event.mode, event.name)
+	jsonBytes, err := json.Marshal(&event)
+	if err != nil {
+		log.Fatalf("Failed marshal object: %s", err)
+	}
+	log.Printf("FILE_OPEN: %s\n", unix.ByteSliceToString(jsonBytes))
 }

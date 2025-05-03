@@ -14,14 +14,11 @@ struct acceptEvent {
 	u64 timestamp;
 	u32 pid;
 	u32 uid;
-	u32 sockfd;
 	u16 family;
-	u8 addr[14];
 	u32 src_addr;
 	u16 src_port;
 	u32 dest_addr;
 	u16 dest_port;
-	u32 addrlen;
 };
 
 struct {
@@ -87,7 +84,7 @@ int kretprobe_tcp_v4_connect(struct pt_regs* ctx)
 	struct task_struct* task = bpf_get_current_task_btf();
 
 #ifdef BPF_DEBUG
-	bpf_printk("KRETPROBE CLOSE V4CON pid = %d/%d, ppid=%d, family = %d, addr2 = %d, addr3 = %d, comm = %s", 
+	bpf_printk("KRETPROBE CLOSE V4CON pid = %d/%d, ppid=%d, family = %d, dest_addr = %d, src_addr = %d, comm = %s", 
 		pid, BPF_CORE_READ(task, pid), BPF_CORE_READ(task, parent, pid), BPF_CORE_READ(*sk, __sk_common.skc_family), BPF_CORE_READ(*sk, __sk_common.skc_daddr), BPF_CORE_READ(*sk, __sk_common.skc_rcv_saddr), comm);
 #endif
 
