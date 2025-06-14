@@ -179,7 +179,7 @@ func ProcessSensorStart(termSignal chan os.Signal, end chan bool) {
 func processCreateEvent_Create(bpfEvent bpfCreateEvent) processCreateEvent {
 	event := processCreateEvent{
 		TYPE:      "PROC_CREATE",
-		TIMESTAMP: time.Unix(int64(bpfEvent.Timestamp), 0).Format(time.RFC3339),
+		TIMESTAMP: time.Unix(int64(bpfEvent.Timestamp), 0).Format(time.RFC3339Nano),
 		PID:       bpfEvent.Pid,
 		UID:       bpfEvent.Uid,
 		FLAGS:     bpfEvent.Flags,
@@ -215,7 +215,7 @@ func processCreateEvent_Handle(event processCreateEvent) {
 func processTerminateEvent_Create(bpfEvent bpfTerminateEvent) processTerminateEvent {
 	event := processTerminateEvent{
 		TYPE:       "PROC_TERM",
-		TIMESTAMP:  time.Unix(int64(bpfEvent.Timestamp), 0).Format(time.RFC3339),
+		TIMESTAMP:  time.Unix(int64(bpfEvent.Timestamp), 0).Format(time.RFC3339Nano),
 		PID:        bpfEvent.Pid,
 		UID:        bpfEvent.Uid,
 		RETURNCODE: bpfEvent.Code,

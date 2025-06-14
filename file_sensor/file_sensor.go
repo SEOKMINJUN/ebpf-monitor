@@ -113,7 +113,7 @@ func FileSensorStart(termSignal chan os.Signal, end chan bool) {
 func fileOpenEvent_Create(bpfEvent bpfFileOpenEvent) fileOpenEvent {
 	event := fileOpenEvent{
 		TYPE:      "FILE_OPEN",
-		TIMESTAMP: time.Unix(int64(bpfEvent.Timestamp), 0).Format(time.RFC3339),
+		TIMESTAMP: time.Unix(int64(bpfEvent.Timestamp), 0).Format(time.RFC3339Nano),
 		PID:       bpfEvent.Pid,
 		UID:       bpfEvent.Uid,
 		NAME:      unix.ByteSliceToString(bpfEvent.Name[:]),
