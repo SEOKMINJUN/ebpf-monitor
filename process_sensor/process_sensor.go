@@ -4,11 +4,13 @@ package process_sensor
 
 import (
 	"bytes"
+	"ebpf-monitor/logger"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"log"
 	"os"
+	"time"
 
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
@@ -16,7 +18,8 @@ import (
 )
 
 type processCreateEvent struct {
-	TIMESTAMP uint64   `json:"timestamp"`
+	TYPE      string
+	TIMESTAMP string   `json:"timestamp"`
 	PID       uint32   `json:"pid"`
 	UID       uint32   `json:"uid"`
 	NAME      string   `json:"name"`
@@ -28,7 +31,8 @@ type processCreateEvent struct {
 }
 
 type processTerminateEvent struct {
-	TIMESTAMP  uint64 `json:"timestamp"`
+	TYPE       string
+	TIMESTAMP  string `json:"timestamp"`
 	PID        uint32 `json:"pid"`
 	UID        uint32 `json:"uid"`
 	PPID       uint32 `json:"ppid"`
@@ -174,7 +178,8 @@ func ProcessSensorStart(termSignal chan os.Signal, end chan bool) {
 
 func processCreateEvent_Create(bpfEvent bpfCreateEvent) processCreateEvent {
 	event := processCreateEvent{
-		TIMESTAMP: bpfEvent.Timestamp,
+		TYPE:      "PROC_CREATE",
+		TIMESTAMP: time.Unix(int64(bpfEvent.Timestamp), 0).Format(time.RFC3339),
 		PID:       bpfEvent.Pid,
 		UID:       bpfEvent.Uid,
 		FLAGS:     bpfEvent.Flags,
@@ -203,12 +208,14 @@ func processCreateEvent_Handle(event processCreateEvent) {
 	if err != nil {
 		log.Fatalf("Failed marshal object: %s", err)
 	}
+	logger.WriteOutput(1, jsonBytes)
 	log.Printf("PROCESS_CREATE: %s\n", unix.ByteSliceToString(jsonBytes))
 }
 
 func processTerminateEvent_Create(bpfEvent bpfTerminateEvent) processTerminateEvent {
 	event := processTerminateEvent{
-		TIMESTAMP:  bpfEvent.Timestamp,
+		TYPE:       "PROC_TERM",
+		TIMESTAMP:  time.Unix(int64(bpfEvent.Timestamp), 0).Format(time.RFC3339),
 		PID:        bpfEvent.Pid,
 		UID:        bpfEvent.Uid,
 		RETURNCODE: bpfEvent.Code,
@@ -224,5 +231,6 @@ func processTerminateEvent_Handle(event processTerminateEvent) {
 	if err != nil {
 		log.Fatalf("Failed marshal object: %s", err)
 	}
+	logger.WriteOutput(2, jsonBytes)
 	log.Printf("PROCESS_TERM: %s\n", unix.ByteSliceToString(jsonBytes))
 }

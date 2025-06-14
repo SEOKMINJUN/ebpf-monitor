@@ -4,6 +4,7 @@ package tcp_sensor
 
 import (
 	"bytes"
+	"ebpf-monitor/logger"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -17,6 +18,7 @@ import (
 )
 
 type tcpConnectEvent struct {
+	TYPE      string
 	TIMESTAMP uint64
 	PID       uint32
 	UID       uint32
@@ -150,6 +152,7 @@ func TcpSensorStart(termSignal chan os.Signal, end chan bool) {
 
 func tcpConnectEvent_Create(bpfEvent bpfAcceptEvent) tcpConnectEvent {
 	event := tcpConnectEvent{
+		TYPE:      "TCP_CONNECT",
 		TIMESTAMP: bpfEvent.Timestamp,
 		PID:       bpfEvent.Pid,
 		UID:       bpfEvent.Uid,
@@ -167,5 +170,6 @@ func tcpConnectEvent_Handle(event tcpConnectEvent) {
 	if err != nil {
 		log.Fatalf("Failed marshal object: %s", err)
 	}
+	logger.WriteOutput(3, jsonBytes)
 	log.Printf("TCP_CONNECT: %s\n", unix.ByteSliceToString(jsonBytes))
 }

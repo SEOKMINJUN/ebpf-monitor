@@ -4,11 +4,13 @@ package file_sensor
 
 import (
 	"bytes"
+	"ebpf-monitor/logger"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"log"
 	"os"
+	"time"
 
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
@@ -16,7 +18,8 @@ import (
 )
 
 type fileOpenEvent struct {
-	TIMESTAMP uint64
+	TYPE      string
+	TIMESTAMP string
 	PID       uint32
 	UID       uint32
 	NAME      string
@@ -109,7 +112,8 @@ func FileSensorStart(termSignal chan os.Signal, end chan bool) {
 
 func fileOpenEvent_Create(bpfEvent bpfFileOpenEvent) fileOpenEvent {
 	event := fileOpenEvent{
-		TIMESTAMP: bpfEvent.Timestamp,
+		TYPE:      "FILE_OPEN",
+		TIMESTAMP: time.Unix(int64(bpfEvent.Timestamp), 0).Format(time.RFC3339),
 		PID:       bpfEvent.Pid,
 		UID:       bpfEvent.Uid,
 		NAME:      unix.ByteSliceToString(bpfEvent.Name[:]),
@@ -124,5 +128,6 @@ func fileOpenEvent_Handle(event fileOpenEvent) {
 	if err != nil {
 		log.Fatalf("Failed marshal object: %s", err)
 	}
+	logger.WriteOutput(0, jsonBytes)
 	log.Printf("FILE_OPEN: %s\n", unix.ByteSliceToString(jsonBytes))
 }
