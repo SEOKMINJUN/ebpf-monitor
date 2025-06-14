@@ -77,7 +77,7 @@ int kretprobe_tcp_v4_connect(struct pt_regs* ctx)
 	event_info->src_addr = BPF_CORE_READ(*sk, __sk_common.skc_rcv_saddr);
 	event_info->src_port = BPF_CORE_READ(*sk, __sk_common.skc_num);
 	
-	bpf_ringbuf_submit(event_info, 0);
+	bpf_ringbuf_submit(event_info, 0);	
 
 	char comm[128];
 	bpf_get_current_comm(&comm, sizeof(comm));

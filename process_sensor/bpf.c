@@ -105,22 +105,6 @@ int kprobe_do_execveat_common(struct pt_regs *ctx)
     return 0;
 }
 
-struct terminateEvent {
-	u64 timestamp;
-	u32 pid;
-	u32 uid;
-	u32 ppid;
-	u32 code;
-	u8 comm[NAME_SIZE];
-};
-
-struct {
-	__uint(type, BPF_MAP_TYPE_RINGBUF);
-	__uint(max_entries, 1 << 24);
-	__type(value, struct terminateEvent);
-} terminateRingBuffer SEC(".maps");
-
-
 SEC("tp/sched/sched_process_exit")
 int tp_process_exit(struct trace_event_raw_sched_process_template* ctx) {
 	u64 tid = bpf_get_current_pid_tgid();
