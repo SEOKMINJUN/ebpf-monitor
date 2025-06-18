@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os"
 
 	"github.com/cilium/ebpf/link"
@@ -149,13 +150,17 @@ func TcpSensorStart(termSignal chan os.Signal, end chan bool) {
 }
 
 func tcpConnectEvent_Handle(bpfEvent bpfAcceptEvent) {
+	ip := make(net.IP, net.IPv4len)
+
 	event := helper.TcpConnectEvent{}
 	event.PID = bpfEvent.Pid
 	event.UID = bpfEvent.Uid
 	event.FAMILY = bpfEvent.Family
-	event.SADDR = bpfEvent.SrcAddr
+	binary.BigEndian.PutUint32(ip, bpfEvent.SrcAddr)
+	event.SADDR = ip.String()
 	event.SPORT = bpfEvent.SrcPort
-	event.DADDR = bpfEvent.DestAddr
+	binary.BigEndian.PutUint32(ip, bpfEvent.DestAddr)
+	event.DADDR = ip.String()
 	event.DPORT = bpfEvent.DestPort
 
 	logger.LogEvent("TCP_CONNECT", int64(bpfEvent.Timestamp), event)
