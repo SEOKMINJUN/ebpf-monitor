@@ -19,11 +19,12 @@ import (
 )
 
 func main() {
-	logger.Init()
-
 	if err := rlimit.RemoveMemlock(); err != nil {
 		panic(err)
 	}
+
+	logger.Init()
+	defer logger.Close()
 
 	file_sensor_signal := make(chan os.Signal, 1)
 	process_sensor_signal := make(chan os.Signal, 1)
@@ -50,5 +51,4 @@ func main() {
 	<-tcp_sensor_end
 	<-shell_sensor_end
 
-	logger.OUTPUT <- nil
 }
