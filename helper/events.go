@@ -2,6 +2,7 @@ package helper
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -29,9 +30,9 @@ type fileInfo struct {
 
 type tcpInfo struct {
 	FAMILY uint16 `json:"FAMILY"`
-	SADDR  uint32 `json:"SADDR"`
+	SADDR  string `json:"SADDR"`
 	SPORT  uint16 `json:"SPORT"`
-	DADDR  uint32 `json:"DADDR"`
+	DADDR  string `json:"DADDR"`
 	DPORT  uint16 `json:"DPORT"`
 }
 
@@ -82,72 +83,88 @@ func (u *Event) SetInfo(eventType string, timestamp int64, obj interface{}) {
 
 // Create Otel Trace span for each event
 func (u *Event) Handle() {
-	context := context.Background()
 	tracer := otel.Tracer("event-tracer")
 	switch u.TYPE {
 	//Process
 	case "PROC_CREATE":
-		ctx, span := tracer.Start(context, "Process")
-		span.SetAttributes(attribute.String("event.type", "PROC_CREATE"))
-		AddPid(u.Data.(ProcessCreateEvent).PID, ctx)
+		data := u.Data.(ProcessCreateEvent)
+		ctx, ok := GetContextByPid(data.PPID)
+		var span trace.Span
+		switch ok {
+		case true:
+			ctx, span = tracer.Start(ctx, "Process "+data.PNAME)
+		case false:
+			ctx, span = tracer.Start(context.Background(), "Process "+data.PNAME)
+		}
+
+		span.SetAttributes(attribute.Int("pid", (int)(data.PID)))
+		span.SetAttributes(attribute.Int("uid", (int)(data.UID)))
+		span.SetAttributes(attribute.Int("ppid", (int)(data.PPID)))
+		span.SetAttributes(attribute.String("pcmd", data.PCMD))
+		span.SetAttributes(attribute.String("name", data.PNAME))
+		span.SetAttributes(attribute.String("argv", "{\""+strings.Join(data.ARGV, "\", \"")+"\"}"))
+		span.SetAttributes(attribute.String("envp", "{\""+strings.Join(data.ENVP, "\", \"")+"\"}"))
+		span.SetAttributes(attribute.Int("flags", (int)(data.FLAGS)))
+
+		AddPid(data.PID, ctx)
 		// fmt
 	case "PROC_TERM":
-		ctx, ok := GetContextByPid(u.Data.(ProcessTerminateEvent).PID)
+		data := u.Data.(ProcessTerminateEvent)
+		ctx, ok := GetContextByPid(data.PID)
 		if !ok {
 			return
 		}
-		defer DeletePid(u.Data.(ProcessTerminateEvent).PID)
+		defer DeletePid(data.PID)
 		span := trace.SpanFromContext(ctx)
 		if span != nil {
-			span.SetAttributes(attribute.String("event.type", "PROC_TERM"))
+			span.SetAttributes(attribute.Int("returncode", (int)(data.RETURNCODE)))
 			span.End()
 		}
 
 	//File
 	case "FILE_OPEN":
-		ctx, ok := GetContextByPid(u.Data.(FileOpenEvent).PID)
+		data := u.Data.(FileOpenEvent)
+		ctx, ok := GetContextByPid(data.PID)
 		if !ok {
 			return
 		}
 		span := trace.SpanFromContext(ctx)
 		if span != nil {
-			_, childSpan := tracer.Start(ctx, "File Open")
-			childSpan.SetAttributes(attribute.String("event.type", "FILE_OPEN"))
-			childSpan.End()
+			span.AddEvent("File Open "+data.FNAME,
+				trace.WithAttributes(attribute.String("filename", data.FNAME)),
+				trace.WithAttributes(attribute.Int("flags", (int)(data.FLAGS))),
+				trace.WithAttributes(attribute.Int("mode", (int)(data.MODE))),
+			)
 		}
 	//TCP
 	case "TCP_CONNECT":
-		ctx, ok := GetContextByPid(u.Data.(TcpConnectEvent).PID)
+		data := u.Data.(TcpConnectEvent)
+		ctx, ok := GetContextByPid(data.PID)
 		if !ok {
 			return
 		}
 		span := trace.SpanFromContext(ctx)
 		if span != nil {
-			_, childSpan := tracer.Start(ctx, "Tcp Connect")
-			childSpan.SetAttributes(attribute.String("event.type", "TCP_CONNECT"))
-			childSpan.End()
+			span.AddEvent("Tcp Connect",
+				trace.WithAttributes(attribute.Int("family", (int)(data.FAMILY))),
+				trace.WithAttributes(attribute.String("Source IP", data.SADDR)),
+				trace.WithAttributes(attribute.Int("Source Port", (int)(data.SPORT))),
+				trace.WithAttributes(attribute.String("Dest IP", data.DADDR)),
+				trace.WithAttributes(attribute.Int("Dest Port", (int)(data.DPORT))),
+			)
 		}
 	//Shell
 	case "SHELL_READLINE":
-		ctx, ok := GetContextByPid(u.Data.(ShellReadlineEvent).PID)
+		data := u.Data.(ShellReadlineEvent)
+		ctx, ok := GetContextByPid(data.PID)
 		if !ok {
 			return
 		}
 		span := trace.SpanFromContext(ctx)
 		if span != nil {
-			_, childSpan := tracer.Start(ctx, "Shell Readline")
-			childSpan.SetAttributes(attribute.String("event.type", "SHELL_READLINE"))
-			childSpan.End()
+			span.AddEvent("Shell Readline",
+				trace.WithAttributes(attribute.String("Command", data.CMD)),
+			)
 		}
 	}
 }
-
-// func (u *basicInfo) SetProcessInfo(proc basicInfo) {
-// 	u.PID = proc.PID
-// 	u.UID = proc.UID
-// }
-
-// func (u *FileOpenEvent) CreateFileOpenEvent(PID uint32, UID uint32, FNAME string, FLAGS uint, MODE uint) {
-// 	u.PID = PID
-// 	u.UID = UID
-// }
