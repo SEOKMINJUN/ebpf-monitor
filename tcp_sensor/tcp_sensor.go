@@ -4,9 +4,9 @@ package tcp_sensor
 
 import (
 	"bytes"
+	"ebpf-monitor/helper"
 	"ebpf-monitor/logger"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -14,7 +14,6 @@ import (
 
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
-	"golang.org/x/sys/unix"
 )
 
 type tcpConnectEvent struct {
@@ -143,33 +142,28 @@ func TcpSensorStart(termSignal chan os.Signal, end chan bool) {
 			end <- true
 			return
 		case EVENT_TYPE_TCP_CONNECT:
-			tcpConnectEvent := tcpConnectEvent_Create(event.createEvent)
-			tcpConnectEvent_Handle(tcpConnectEvent)
+			tcpConnectEvent_Handle(event.createEvent)
 			continue
 		}
 	}
 }
 
-func tcpConnectEvent_Create(bpfEvent bpfAcceptEvent) tcpConnectEvent {
-	event := tcpConnectEvent{
-		TYPE:      "TCP_CONNECT",
-		TIMESTAMP: bpfEvent.Timestamp,
-		PID:       bpfEvent.Pid,
-		UID:       bpfEvent.Uid,
-		FAMILY:    bpfEvent.Family,
-		SADDR:     bpfEvent.SrcAddr,
-		SPORT:     bpfEvent.SrcPort,
-		DADDR:     bpfEvent.DestAddr,
-		DPORT:     bpfEvent.DestPort,
-	}
-	return event
-}
+func tcpConnectEvent_Handle(bpfEvent bpfAcceptEvent) {
+	event := helper.TcpConnectEvent{}
+	event.PID = bpfEvent.Pid
+	event.UID = bpfEvent.Uid
+	event.FAMILY = bpfEvent.Family
+	event.SADDR = bpfEvent.SrcAddr
+	event.SPORT = bpfEvent.SrcPort
+	event.DADDR = bpfEvent.DestAddr
+	event.DPORT = bpfEvent.DestPort
 
-func tcpConnectEvent_Handle(event tcpConnectEvent) {
-	jsonBytes, err := json.Marshal(&event)
-	if err != nil {
-		log.Fatalf("Failed marshal object: %s", err)
-	}
-	logger.WriteOutput(3, jsonBytes)
-	log.Printf("TCP_CONNECT: %s\n", unix.ByteSliceToString(jsonBytes))
+	logger.LogEvent("TCP_CONNECT", int64(bpfEvent.Timestamp), event)
+
+	// jsonBytes, err := json.Marshal(&event)
+	// if err != nil {
+	// 	log.Fatalf("Failed marshal object: %s", err)
+	// }
+	// logger.WriteOutput(3, jsonBytes)
+	// log.Printf("TCP_CONNECT: %s\n", unix.ByteSliceToString(jsonBytes))
 }

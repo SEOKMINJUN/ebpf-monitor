@@ -1,9 +1,11 @@
 package logger
 
 import (
+	"ebpf-monitor/helper"
 	"encoding/json"
 	"log"
 	"os"
+	"time"
 )
 
 var PRINT_OUTPUT = true
@@ -30,6 +32,14 @@ func Init() {
 		}
 
 	}()
+}
+
+func LogEvent(event_type string, timestamp int64, obj interface{}) {
+	event := helper.Event{}
+	event.TYPE = event_type
+	event.TIMESTAMP = time.Unix(timestamp, 0).Format(time.RFC3339Nano)
+	event.Data = helper.StructToMap(obj)
+	//Do send trace
 }
 
 func WriteOutput(sensor_type int, jsonBytes []byte) {

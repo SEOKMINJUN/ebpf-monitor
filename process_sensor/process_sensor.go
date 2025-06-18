@@ -4,41 +4,17 @@ package process_sensor
 
 import (
 	"bytes"
+	"ebpf-monitor/helper"
 	"ebpf-monitor/logger"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"log"
 	"os"
-	"time"
 
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"golang.org/x/sys/unix"
 )
-
-type processCreateEvent struct {
-	TYPE      string
-	TIMESTAMP string   `json:"timestamp"`
-	PID       uint32   `json:"pid"`
-	UID       uint32   `json:"uid"`
-	NAME      string   `json:"name"`
-	ARGV      []string `json:"argv"`
-	ENVP      []string `json:"envp"`
-	FLAGS     uint32   `json:"flags"`
-	PPID      uint32   `json:"ppid"`
-	PCMD      string   `json:"pcmd"`
-}
-
-type processTerminateEvent struct {
-	TYPE       string
-	TIMESTAMP  string `json:"timestamp"`
-	PID        uint32 `json:"pid"`
-	UID        uint32 `json:"uid"`
-	PPID       uint32 `json:"ppid"`
-	PCMD       string `json:"pcmd"`
-	RETURNCODE uint32 `json:"returncode"`
-}
 
 const (
 	EVENT_TYPE_EXIT           = -1
@@ -165,28 +141,23 @@ func ProcessSensorStart(termSignal chan os.Signal, end chan bool) {
 			end <- true
 			return
 		case EVENT_TYPE_PROC_CREATE:
-			processCreateEvent := processCreateEvent_Create(event.createEvent)
-			processCreateEvent_Handle(processCreateEvent)
+			processCreateEvent_Handle(event.createEvent)
 			continue
 		case EVENT_TYPE_PROC_TERMINATE:
-			processTerminateEvent := processTerminateEvent_Create(event.terminateEvent)
-			processTerminateEvent_Handle(processTerminateEvent)
+			processTerminateEvent_Handle(event.terminateEvent)
 			continue
 		}
 	}
 }
 
-func processCreateEvent_Create(bpfEvent bpfCreateEvent) processCreateEvent {
-	event := processCreateEvent{
-		TYPE:      "PROC_CREATE",
-		TIMESTAMP: time.Unix(int64(bpfEvent.Timestamp), 0).Format(time.RFC3339Nano),
-		PID:       bpfEvent.Pid,
-		UID:       bpfEvent.Uid,
-		FLAGS:     bpfEvent.Flags,
-		NAME:      unix.ByteSliceToString(bpfEvent.Name[:]),
-		PPID:      bpfEvent.Ppid,
-		PCMD:      unix.ByteSliceToString(bpfEvent.Comm[:]),
-	}
+func processCreateEvent_Handle(bpfEvent bpfCreateEvent) {
+	event := helper.ProcessCreateEvent{}
+	event.PID = bpfEvent.Pid
+	event.UID = bpfEvent.Uid
+	event.PNAME = unix.ByteSliceToString(bpfEvent.Name[:])
+	event.FLAGS = bpfEvent.Flags
+	event.PPID = bpfEvent.Ppid
+	event.PCMD = unix.ByteSliceToString(bpfEvent.Comm[:])
 	for _, bytes := range bpfEvent.Argv {
 		if bytes[0] == 0 {
 			break
@@ -200,37 +171,31 @@ func processCreateEvent_Create(bpfEvent bpfCreateEvent) processCreateEvent {
 		}
 		event.ENVP = append(event.ENVP, unix.ByteSliceToString(bytes[:]))
 	}
-	return event
+
+	logger.LogEvent("PROC_CREATE", int64(bpfEvent.Timestamp), event)
+
+	// jsonBytes, err := json.Marshal(&event)
+	// if err != nil {
+	// 	log.Fatalf("Failed marshal object: %s", err)
+	// }
+	// logger.WriteOutput(1, jsonBytes)
+	// log.Printf("PROCESS_CREATE: %s\n", unix.ByteSliceToString(jsonBytes))
 }
 
-func processCreateEvent_Handle(event processCreateEvent) {
-	jsonBytes, err := json.Marshal(&event)
-	if err != nil {
-		log.Fatalf("Failed marshal object: %s", err)
-	}
-	logger.WriteOutput(1, jsonBytes)
-	log.Printf("PROCESS_CREATE: %s\n", unix.ByteSliceToString(jsonBytes))
-}
+func processTerminateEvent_Handle(bpfEvent bpfTerminateEvent) {
+	event := helper.ProcessTerminateEvent{}
+	event.PID = bpfEvent.Pid
+	event.UID = bpfEvent.Uid
+	event.PPID = bpfEvent.Ppid
+	event.PCMD = unix.ByteSliceToString(bpfEvent.Comm[:])
+	event.RETURNCODE = bpfEvent.Code
 
-func processTerminateEvent_Create(bpfEvent bpfTerminateEvent) processTerminateEvent {
-	event := processTerminateEvent{
-		TYPE:       "PROC_TERM",
-		TIMESTAMP:  time.Unix(int64(bpfEvent.Timestamp), 0).Format(time.RFC3339Nano),
-		PID:        bpfEvent.Pid,
-		UID:        bpfEvent.Uid,
-		RETURNCODE: bpfEvent.Code,
-		PPID:       bpfEvent.Ppid,
-		PCMD:       unix.ByteSliceToString(bpfEvent.Comm[:]),
-	}
+	logger.LogEvent("PROC_TERM", int64(bpfEvent.Timestamp), event)
 
-	return event
-}
-
-func processTerminateEvent_Handle(event processTerminateEvent) {
-	jsonBytes, err := json.Marshal(&event)
-	if err != nil {
-		log.Fatalf("Failed marshal object: %s", err)
-	}
-	logger.WriteOutput(2, jsonBytes)
-	log.Printf("PROCESS_TERM: %s\n", unix.ByteSliceToString(jsonBytes))
+	// jsonBytes, err := json.Marshal(&event)
+	// if err != nil {
+	// 	log.Fatalf("Failed marshal object: %s", err)
+	// }
+	// logger.WriteOutput(2, jsonBytes)
+	// log.Printf("PROCESS_TERM: %s\n", unix.ByteSliceToString(jsonBytes))
 }

@@ -4,28 +4,17 @@ package file_sensor
 
 import (
 	"bytes"
+	"ebpf-monitor/helper"
 	"ebpf-monitor/logger"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"log"
 	"os"
-	"time"
 
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"golang.org/x/sys/unix"
 )
-
-type fileOpenEvent struct {
-	TYPE      string
-	TIMESTAMP string
-	PID       uint32
-	UID       uint32
-	NAME      string
-	FLAGS     uint32
-	MODE      uint16
-}
 
 const (
 	EVENT_TYPE_EXIT      = -1
@@ -103,31 +92,25 @@ func FileSensorStart(termSignal chan os.Signal, end chan bool) {
 			end <- true
 			return
 		case EVENT_TYPE_FILE_OPEN:
-			fileOpenEvent := fileOpenEvent_Create(event.openEvent)
-			fileOpenEvent_Handle(fileOpenEvent)
+			fileOpenEvent_Handle(event.openEvent)
 			continue
 		}
 	}
 }
 
-func fileOpenEvent_Create(bpfEvent bpfFileOpenEvent) fileOpenEvent {
-	event := fileOpenEvent{
-		TYPE:      "FILE_OPEN",
-		TIMESTAMP: time.Unix(int64(bpfEvent.Timestamp), 0).Format(time.RFC3339Nano),
-		PID:       bpfEvent.Pid,
-		UID:       bpfEvent.Uid,
-		NAME:      unix.ByteSliceToString(bpfEvent.Name[:]),
-		FLAGS:     bpfEvent.Flags,
-		MODE:      bpfEvent.Mode,
-	}
-	return event
-}
+func fileOpenEvent_Handle(bpfEvent bpfFileOpenEvent) {
+	event := helper.FileOpenEvent{}
+	event.PID = bpfEvent.Pid
+	event.UID = bpfEvent.Uid
+	event.FNAME = unix.ByteSliceToString(bpfEvent.Name[:])
+	event.FLAGS = bpfEvent.Flags
+	event.MODE = bpfEvent.Mode
 
-func fileOpenEvent_Handle(event fileOpenEvent) {
-	jsonBytes, err := json.Marshal(&event)
-	if err != nil {
-		log.Fatalf("Failed marshal object: %s", err)
-	}
-	logger.WriteOutput(0, jsonBytes)
-	log.Printf("FILE_OPEN: %s\n", unix.ByteSliceToString(jsonBytes))
+	logger.LogEvent("FILE_OPEN", int64(bpfEvent.Timestamp), event)
+	// jsonBytes, err := json.Marshal(&event)
+	// if err != nil {
+	// 	log.Fatalf("Failed marshal object: %s", err)
+	// }
+	// logger.WriteOutput(0, jsonBytes)
+	// log.Printf("FILE_OPEN: %s\n", unix.ByteSliceToString(jsonBytes))
 }

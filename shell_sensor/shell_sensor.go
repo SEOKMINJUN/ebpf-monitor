@@ -4,26 +4,17 @@ package shell_sensor
 
 import (
 	"bytes"
+	"ebpf-monitor/helper"
 	"ebpf-monitor/logger"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"log"
 	"os"
-	"time"
 
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/perf"
 	"golang.org/x/sys/unix"
 )
-
-type readlineEvent struct {
-	TYPE      string
-	TIMESTAMP string `json:"timestamp"`
-	PID       uint32 `json:"pid"`
-	UID       uint32 `json:"uid"`
-	CMD       string `json:"cmd"`
-}
 
 type perfEvent struct {
 	eventType     int32
@@ -122,28 +113,24 @@ func SensorStart(termSignal chan os.Signal, end chan bool) {
 			end <- true
 			return
 		case EVENT_TYPE_CMD:
-			readlineEvent := readlineEvent_Create(event.readlineEvent)
-			readlineEvent_Handle(readlineEvent)
+			readlineEvent_Handle(event.readlineEvent)
 			continue
 		}
 	}
 }
 
-func readlineEvent_Create(bpfEvent bpfReadlineEvent) readlineEvent {
-	event := readlineEvent{
-		TYPE:      "SHELL_READLINE",
-		TIMESTAMP: time.Unix(int64(bpfEvent.Timestamp), 0).Format(time.RFC3339Nano),
-		PID:       bpfEvent.Pid,
-		CMD:       unix.ByteSliceToString(bpfEvent.Line[:]),
-	}
-	return event
-}
+func readlineEvent_Handle(bpfEvent bpfReadlineEvent) {
+	event := helper.ShellReadlineEvent{}
+	event.PID = bpfEvent.Pid
+	event.UID = bpfEvent.Uid
+	event.CMD = unix.ByteSliceToString(bpfEvent.Line[:])
 
-func readlineEvent_Handle(event readlineEvent) {
-	jsonBytes, err := json.Marshal(&event)
-	if err != nil {
-		log.Fatalf("Failed marshal object: %s", err)
-	}
-	logger.WriteOutput(1, jsonBytes)
-	log.Printf("READLINE: %s\n", unix.ByteSliceToString(jsonBytes))
+	logger.LogEvent("SHELL_READLINE", int64(bpfEvent.Timestamp), event)
+
+	// jsonBytes, err := json.Marshal(&event)
+	// if err != nil {
+	// 	log.Fatalf("Failed marshal object: %s", err)
+	// }
+	// logger.WriteOutput(1, jsonBytes)
+	// log.Printf("READLINE: %s\n", unix.ByteSliceToString(jsonBytes))
 }

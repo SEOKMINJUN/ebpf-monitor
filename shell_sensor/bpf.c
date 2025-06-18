@@ -10,6 +10,7 @@ char __license[] SEC("license") = "Dual MIT/GPL";
 struct readlineEvent {
 	u64 timestamp;
 	u32 pid;
+	u32 uid;
 	u8 line[80];
 };
 
@@ -24,7 +25,8 @@ int uretprobe_bash_readline(struct pt_regs *ctx) {
 	struct readlineEvent event;
 
 	event.timestamp = bpf_ktime_get_ns();
-	event.pid = bpf_get_current_pid_tgid();
+	event.pid = bpf_get_current_pid_tgid() >> 32;
+	event.uid = bpf_get_current_uid_gid() & 0xFFFFFFFF;
 	bpf_probe_read(&event.line, sizeof(event.line), (void *)PT_REGS_RC(ctx));
 
 	bpf_perf_event_output(ctx, &readlineEvents, BPF_F_CURRENT_CPU, &event, sizeof(event));
