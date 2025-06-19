@@ -7,15 +7,20 @@ import (
 	"sync"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	otellog "go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 var processMap map[uint32]context.Context = make(map[uint32]context.Context)
 var mutex sync.RWMutex
+var Logger otellog.Logger
 
 func StructToMap(structObj interface{}) map[string]interface{} {
 	result := make(map[string]interface{})
@@ -88,7 +93,28 @@ func InitTracer() {
 	// Set the global trace provider
 	otel.SetTracerProvider(tp)
 
+	// Log export
+	logExporter, err := otlploghttp.New(ctx, otlploghttp.WithInsecure())
+	if err != nil {
+		panic("failed to initialize exporter")
+	}
+
+	// Create the logger provider
+	lp := sdklog.NewLoggerProvider(
+		sdklog.WithProcessor(
+			sdklog.NewBatchProcessor(logExporter),
+		),
+	)
+
+	// Ensure the logger is shutdown before exiting so all pending logs are exported
+	defer lp.Shutdown(ctx)
+
+	// Set the logger provider globally
+	global.SetLoggerProvider(lp)
+
 	// Set the propagator
 	propagator := propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
 	otel.SetTextMapPropagator(propagator)
+
+	Logger = global.GetLoggerProvider().Logger("ebpf-monitor")
 }
