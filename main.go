@@ -7,6 +7,7 @@ package main
 
 import (
 	"ebpf-monitor/file_sensor"
+	"ebpf-monitor/helper"
 	"ebpf-monitor/logger"
 	"ebpf-monitor/process_sensor"
 	"ebpf-monitor/shell_sensor"
@@ -26,25 +27,24 @@ func main() {
 	logger.Init()
 	defer logger.Close()
 
-	file_sensor_signal := make(chan os.Signal, 1)
-	process_sensor_signal := make(chan os.Signal, 1)
-	tcp_sensor_signal := make(chan os.Signal, 1)
-	shell_sensor_signal := make(chan os.Signal, 1)
+	helper.InitBroker()
 
-	signal.Notify(file_sensor_signal, os.Interrupt, syscall.SIGTERM)
-	signal.Notify(process_sensor_signal, os.Interrupt, syscall.SIGTERM)
-	signal.Notify(tcp_sensor_signal, os.Interrupt, syscall.SIGTERM)
-	signal.Notify(shell_sensor_signal, os.Interrupt, syscall.SIGTERM)
+	termSignal := make(chan os.Signal, 1)
+	go func() {
+		<-termSignal
+		helper.GlobalBroker.Publish(true)
+	}()
+	signal.Notify(termSignal, os.Interrupt, syscall.SIGTERM)
 
 	file_sensor_end := make(chan bool)
 	process_sensor_end := make(chan bool)
 	tcp_sensor_end := make(chan bool)
 	shell_sensor_end := make(chan bool)
 
-	go file_sensor.FileSensorStart(file_sensor_signal, file_sensor_end)
-	go process_sensor.ProcessSensorStart(process_sensor_signal, process_sensor_end)
-	go tcp_sensor.TcpSensorStart(tcp_sensor_signal, tcp_sensor_end)
-	go shell_sensor.SensorStart(shell_sensor_signal, shell_sensor_end)
+	go file_sensor.FileSensorStart(file_sensor_end)
+	go process_sensor.ProcessSensorStart(process_sensor_end)
+	go tcp_sensor.TcpSensorStart(tcp_sensor_end)
+	go shell_sensor.SensorStart(shell_sensor_end)
 
 	<-file_sensor_end
 	<-process_sensor_end

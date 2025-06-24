@@ -65,9 +65,6 @@ func InitTracer() {
 		sdklog.WithResource(res),
 	)
 
-	// Ensure the logger is shutdown before exiting so all pending logs are exported
-	defer lp.Shutdown(ctx)
-
 	// Set the logger provider globally
 	global.SetLoggerProvider(lp)
 
@@ -77,4 +74,16 @@ func InitTracer() {
 
 	Tracer = otel.Tracer("EVENT")
 	Logger = global.GetLoggerProvider().Logger("EVENT-LOGGER")
+
+	go func() {
+		termSignal := GlobalBroker.Subscribe()
+		<-termSignal
+
+		if err := lp.Shutdown(ctx); err != nil {
+			log.Fatalf("failed to shutdown logger provider: %e", err)
+		}
+		if err := tp.Shutdown(ctx); err != nil {
+			log.Fatalf("failed to shutdown trace provider: %e", err)
+		}
+	}()
 }

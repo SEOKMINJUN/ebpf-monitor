@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os"
 
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
@@ -44,7 +43,7 @@ func inet_ntoa(addr uint32) string {
 		addr&0xFF, (addr>>8)&0xFF, (addr>>16)&0xFF, (addr>>24)&0xFF)
 }
 
-func TcpSensorStart(termSignal chan os.Signal, end chan bool) {
+func TcpSensorStart(end chan bool) {
 	// Load pre-compiled bpf programs and maps into the kernel.
 	objs := bpfObjects{}
 	if err := loadBpfObjects(&objs, nil); err != nil {
@@ -98,6 +97,7 @@ func TcpSensorStart(termSignal chan os.Signal, end chan bool) {
 	// Close the reader when the process receives a signal, which will exit
 	// the read loop.
 	go func() {
+		termSignal := helper.GlobalBroker.Subscribe()
 		<-termSignal
 
 		if err := rd.Close(); err != nil {
@@ -140,6 +140,7 @@ func TcpSensorStart(termSignal chan os.Signal, end chan bool) {
 		event = <-eventChan
 		switch event.eventType {
 		case EVENT_TYPE_EXIT:
+			log.Println("Exiting tcp sensor..")
 			end <- true
 			return
 		case EVENT_TYPE_TCP_CONNECT:

@@ -33,7 +33,7 @@ const (
 	funcName = "readline"
 )
 
-func SensorStart(termSignal chan os.Signal, end chan bool) {
+func SensorStart(end chan bool) {
 	// Load pre-compiled bpf programs and maps into the kernel.
 	objs := bpfObjects{}
 	if err := loadBpfObjects(&objs, nil); err != nil {
@@ -63,6 +63,7 @@ func SensorStart(termSignal chan os.Signal, end chan bool) {
 	// Close the reader when the process receives a signal, which will exit
 	// the read loop.
 	go func() {
+		termSignal := helper.GlobalBroker.Subscribe()
 		<-termSignal
 
 		if err := eventsReader.Close(); err != nil {
@@ -110,6 +111,7 @@ func SensorStart(termSignal chan os.Signal, end chan bool) {
 		event = <-eventChan
 		switch event.eventType {
 		case EVENT_TYPE_EXIT:
+			log.Println("Exiting shell sensor..")
 			end <- true
 			return
 		case EVENT_TYPE_CMD:

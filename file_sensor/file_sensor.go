@@ -9,7 +9,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"log"
-	"os"
 
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
@@ -26,7 +25,7 @@ type ringEvent struct {
 	openEvent bpfFileOpenEvent
 }
 
-func FileSensorStart(termSignal chan os.Signal, end chan bool) {
+func FileSensorStart(end chan bool) {
 	// Load pre-compiled programs and maps into the kernel.
 	objs := bpfObjects{}
 	if err := loadBpfObjects(&objs, nil); err != nil {
@@ -49,6 +48,7 @@ func FileSensorStart(termSignal chan os.Signal, end chan bool) {
 	// Close the reader when the process receives a signal, which will exit
 	// the read loop.
 	go func() {
+		termSignal := helper.GlobalBroker.Subscribe()
 		<-termSignal
 
 		if err := rd.Close(); err != nil {
@@ -89,6 +89,7 @@ func FileSensorStart(termSignal chan os.Signal, end chan bool) {
 		event = <-eventChan
 		switch event.eventType {
 		case EVENT_TYPE_EXIT:
+			log.Println("Exiting file sensor..")
 			end <- true
 			return
 		case EVENT_TYPE_FILE_OPEN:
