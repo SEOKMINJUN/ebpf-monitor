@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/trace"
@@ -67,8 +66,8 @@ type ShellReadlineEvent struct {
 }
 
 type basicEvent struct {
-	TYPE      string `json:"type"`
-	TIMESTAMP string `json:"timestamp"`
+	TYPE      string    `json:"type"`
+	TIMESTAMP time.Time `json:"timestamp"`
 }
 
 type Event struct {
@@ -78,13 +77,12 @@ type Event struct {
 
 func (u *Event) SetInfo(eventType string, timestamp int64, obj interface{}) {
 	u.TYPE = eventType
-	u.TIMESTAMP = time.Unix(timestamp, 0).Format(time.RFC3339Nano)
+	u.TIMESTAMP = time.Unix(timestamp, 0)
 	u.Data = obj
 }
 
 // Create Otel Trace span for each event
 func (u *Event) Handle() {
-	tracer := otel.Tracer("event-tracer")
 	switch u.TYPE {
 	//Process
 	case "PROC_CREATE":
@@ -93,9 +91,9 @@ func (u *Event) Handle() {
 		var span trace.Span
 		switch ok {
 		case true:
-			ctx, span = tracer.Start(ctx, "Process "+data.PNAME)
+			ctx, span = Tracer.Start(ctx, "Process "+data.PNAME, trace.WithTimestamp(u.TIMESTAMP))
 		case false:
-			ctx, span = tracer.Start(context.Background(), "Process "+data.PNAME)
+			ctx, span = Tracer.Start(context.Background(), "Process "+data.PNAME)
 		}
 		ARG_STR := "{\"" + strings.Join(data.ARGV, "\", \"") + "\"}"
 		ENV_STR := "{\"" + strings.Join(data.ENVP, "\", \"") + "\"}"
@@ -139,7 +137,7 @@ func (u *Event) Handle() {
 			span := trace.SpanFromContext(ctx)
 			if span != nil {
 				span.SetAttributes(attribute.Int("returncode", (int)(data.RETURNCODE)))
-				span.End()
+				span.End(trace.WithTimestamp(u.TIMESTAMP))
 			}
 		}
 
