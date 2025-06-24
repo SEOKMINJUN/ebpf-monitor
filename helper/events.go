@@ -109,13 +109,11 @@ func (u *Event) Handle() {
 
 		AddPid(data.PID, ctx)
 
-		TraceID := span.SpanContext().TraceID().String()
-		SpanID := span.SpanContext().SpanID().String()
-
 		record := log.Record{}
 		record.SetEventName("Process")
 		record.SetSeverity(log.SeverityInfo)
-		record.SetBody(log.StringValue("created"))
+		record.SetObservedTimestamp(u.TIMESTAMP)
+		record.SetBody(log.StringValue("Process created"))
 		record.AddAttributes(
 			log.Int("pid", (int)(data.PID)),
 			log.Int("uid", (int)(data.UID)),
@@ -125,8 +123,6 @@ func (u *Event) Handle() {
 			log.String("argv", ARG_STR),
 			log.String("envp", ENV_STR),
 			log.Int("flags", (int)(data.FLAGS)),
-			log.String("TraceID", TraceID),
-			log.String("SpanID", SpanID),
 		)
 		Logger.Emit(ctx, record)
 	case "PROC_TERM":
@@ -141,25 +137,13 @@ func (u *Event) Handle() {
 			}
 		}
 
-		var TraceID string
-		var SpanID string
-		if ok {
-			span := trace.SpanFromContext(ctx)
-			TraceID = span.SpanContext().TraceID().String()
-			SpanID = span.SpanContext().SpanID().String()
-		} else {
-			TraceID = ""
-			SpanID = ""
-		}
-
 		record := log.Record{}
 		record.SetEventName("Process")
 		record.SetSeverity(log.SeverityInfo)
-		record.SetBody(log.StringValue("terminated"))
+		record.SetObservedTimestamp(u.TIMESTAMP)
+		record.SetBody(log.StringValue("Process terminated"))
 		record.AddAttributes(
 			log.Int("returncode", (int)(data.RETURNCODE)),
-			log.String("TraceID", TraceID),
-			log.String("SpanID", SpanID),
 		)
 		Logger.Emit(ctx, record)
 
@@ -178,27 +162,15 @@ func (u *Event) Handle() {
 			}
 		}
 
-		var TraceID string
-		var SpanID string
-		if ok {
-			span := trace.SpanFromContext(ctx)
-			TraceID = span.SpanContext().TraceID().String()
-			SpanID = span.SpanContext().SpanID().String()
-		} else {
-			TraceID = ""
-			SpanID = ""
-		}
-
 		record := log.Record{}
 		record.SetEventName("File")
 		record.SetSeverity(log.SeverityInfo)
-		record.SetBody(log.StringValue("Open"))
+		record.SetObservedTimestamp(u.TIMESTAMP)
+		record.SetBody(log.StringValue("File Open"))
 		record.AddAttributes(
 			log.String("filename", data.FNAME),
 			log.Int("flags", (int)(data.FLAGS)),
 			log.Int("mode", (int)(data.MODE)),
-			log.String("TraceID", TraceID),
-			log.String("SpanID", SpanID),
 		)
 		Logger.Emit(ctx, record)
 	//TCP
@@ -218,29 +190,17 @@ func (u *Event) Handle() {
 			}
 		}
 
-		var TraceID string
-		var SpanID string
-		if ok {
-			span := trace.SpanFromContext(ctx)
-			TraceID = span.SpanContext().TraceID().String()
-			SpanID = span.SpanContext().SpanID().String()
-		} else {
-			TraceID = ""
-			SpanID = ""
-		}
-
 		record := log.Record{}
 		record.SetEventName("Tcp")
 		record.SetSeverity(log.SeverityInfo)
-		record.SetBody(log.StringValue("Connect"))
+		record.SetObservedTimestamp(u.TIMESTAMP)
+		record.SetBody(log.StringValue("TCP Connected"))
 		record.AddAttributes(
 			log.Int("family", (int)(data.FAMILY)),
 			log.String("Source IP", data.SADDR),
 			log.Int("Source Port", (int)(data.SPORT)),
 			log.String("Dest IP", data.DADDR),
 			log.Int("Dest Port", (int)(data.DPORT)),
-			log.String("TraceID", TraceID),
-			log.String("SpanID", SpanID),
 		)
 		Logger.Emit(ctx, record)
 	//Shell
@@ -256,24 +216,12 @@ func (u *Event) Handle() {
 			}
 		}
 
-		var TraceID string
-		var SpanID string
-		if ok {
-			span := trace.SpanFromContext(ctx)
-			TraceID = span.SpanContext().TraceID().String()
-			SpanID = span.SpanContext().SpanID().String()
-		} else {
-			TraceID = ""
-			SpanID = ""
-		}
-
 		record := log.Record{}
 		record.SetEventName("Shell")
 		record.SetSeverity(log.SeverityInfo)
-		record.SetBody(log.StringValue("Readline"))
-		record.AddAttributes(log.String("Command", data.CMD),
-			log.String("TraceID", TraceID),
-			log.String("SpanID", SpanID))
+		record.SetObservedTimestamp(u.TIMESTAMP)
+		record.SetBody(log.StringValue("Shell Readline"))
+		record.AddAttributes(log.String("Command", data.CMD))
 		Logger.Emit(ctx, record)
 	}
 
