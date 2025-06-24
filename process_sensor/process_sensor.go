@@ -37,11 +37,18 @@ func ProcessSensorStart(end chan bool) {
 
 	// link kprobe to bpf program
 	// do_execveat_common.isra.0 can be found on /proc/kallsyms
-	kp, err := link.Kprobe("do_execveat_common.isra.0", objs.KprobeDoExecveatCommon, nil)
+	// kp, err := link.Kprobe("do_execveat_common.isra.0", objs.KprobeDoExecveatCommon, nil)
+	// kp, err := link.Kprobe("sys_execve", objs.KprobeDoExecveatCommon, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening kprobe: %s", err)
+	// }
+	// defer kp.Close()
+
+	tp, err := link.Tracepoint("syscalls", "sys_enter_execve", objs.TracepointSysEnterExecve, nil)
 	if err != nil {
-		log.Fatalf("opening kprobe: %s", err)
+		log.Fatalf("attaching to tracepoint: %s", err)
 	}
-	defer kp.Close()
+	defer tp.Close()
 
 	// create RingBuffer reader for do_execveat_common
 	createRingReader, err := ringbuf.NewReader(objs.CreateRingBuffer)
@@ -156,7 +163,7 @@ func processCreateEvent_Handle(bpfEvent bpfCreateEvent) {
 	event.PID = bpfEvent.Pid
 	event.UID = bpfEvent.Uid
 	event.PNAME = unix.ByteSliceToString(bpfEvent.Name[:])
-	event.FLAGS = bpfEvent.Flags
+	// event.FLAGS = bpfEvent.Flags
 	event.PPID = bpfEvent.Ppid
 	event.PCMD = unix.ByteSliceToString(bpfEvent.Comm[:])
 	for _, bytes := range bpfEvent.Argv {
@@ -172,7 +179,7 @@ func processCreateEvent_Handle(bpfEvent bpfCreateEvent) {
 		}
 		event.ENVP = append(event.ENVP, unix.ByteSliceToString(bytes[:]))
 	}
-
+	// log.Printf("[%d]%s : %s", event.PID, event.PNAME, event.PCMD)
 	logger.LogEvent("PROC_CREATE", int64(bpfEvent.Timestamp), event)
 
 	// jsonBytes, err := json.Marshal(&event)

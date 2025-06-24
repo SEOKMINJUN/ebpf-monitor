@@ -2,6 +2,7 @@ package helper
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -19,7 +20,7 @@ type processInfo struct {
 	PNAME string   `json:"name"`
 	ARGV  []string `json:"args"`
 	ENVP  []string `json:"envp"`
-	FLAGS uint32   `json:"flags"`
+	// FLAGS uint32   `json:"flags"`
 }
 
 type fileInfo struct {
@@ -97,6 +98,7 @@ func (u *Event) Handle() {
 		}
 		ARG_STR := "{\"" + strings.Join(data.ARGV, "\", \"") + "\"}"
 		ENV_STR := "{\"" + strings.Join(data.ENVP, "\", \"") + "\"}"
+		// ARG_STR := strings.Join(data.ENVP, " ")
 
 		span.SetAttributes(attribute.Int("pid", (int)(data.PID)))
 		span.SetAttributes(attribute.Int("uid", (int)(data.UID)))
@@ -105,7 +107,7 @@ func (u *Event) Handle() {
 		span.SetAttributes(attribute.String("name", data.PNAME))
 		span.SetAttributes(attribute.String("argv", ARG_STR))
 		span.SetAttributes(attribute.String("envp", ENV_STR))
-		span.SetAttributes(attribute.Int("flags", (int)(data.FLAGS)))
+		// span.SetAttributes(attribute.Int("flags", (int)(data.FLAGS)))
 
 		AddPid(data.PID, ctx)
 
@@ -121,8 +123,8 @@ func (u *Event) Handle() {
 			log.String("pcmd", data.PCMD),
 			log.String("name", data.PNAME),
 			log.String("argv", ARG_STR),
-			log.String("envp", ENV_STR),
-			log.Int("flags", (int)(data.FLAGS)),
+			// log.String("envp", ENV_STR),
+			// log.Int("flags", (int)(data.FLAGS)),
 		)
 		Logger.Emit(ctx, record)
 	case "PROC_TERM":
@@ -214,6 +216,7 @@ func (u *Event) Handle() {
 					trace.WithAttributes(attribute.String("Command", data.CMD)),
 				)
 			}
+			fmt.Printf("Create shell trace: %s\n", data.CMD)
 		}
 
 		record := log.Record{}
@@ -222,6 +225,7 @@ func (u *Event) Handle() {
 		record.SetObservedTimestamp(u.TIMESTAMP)
 		record.SetBody(log.StringValue("Shell Readline"))
 		record.AddAttributes(log.String("Command", data.CMD))
+		fmt.Printf("Create shell log: %s\n", data.CMD)
 		Logger.Emit(ctx, record)
 	}
 
