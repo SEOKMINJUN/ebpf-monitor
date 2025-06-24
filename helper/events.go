@@ -233,7 +233,6 @@ func (u *Event) Handle() {
 		record.SetObservedTimestamp(u.TIMESTAMP)
 		record.SetBody(log.StringValue("Shell Readline"))
 		record.AddAttributes(log.String("Command", data.CMD))
-		fmt.Printf("Create shell log: %s\n", data.CMD)
 		Logger.Emit(ctx, record)
 	}
 
