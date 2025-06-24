@@ -1,9 +1,24 @@
 package helper
 
+/*
+#include <time.h>
+
+long long get_monotonic_time_ns() {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == -1) {
+        return -1; // Or some other error indicator
+    }
+    return (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+}
+*/
+import "C"
+
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"sync"
+	"time"
 )
 
 var processMap map[uint32]context.Context = make(map[uint32]context.Context)
@@ -55,4 +70,22 @@ func GetContextByPid(pid uint32) (context.Context, bool) {
 		return nil, false
 	}
 	return ctx, true
+}
+
+func getMonotonicTimeNs() (int64, error) {
+	ns := C.get_monotonic_time_ns()
+	if ns == -1 {
+		return 0, fmt.Errorf("failed to gettime")
+	}
+	return int64(ns), nil
+}
+
+func ConvertMonotonicTimeToRealTime(timestamp int64) int64 {
+	currentRealtime := time.Now()
+	currentMonotonicApprox, _ := getMonotonicTimeNs()
+	timeDiff := currentMonotonicApprox - timestamp
+	if timeDiff == 0 {
+		return 0
+	}
+	return currentRealtime.UnixNano() - timeDiff
 }

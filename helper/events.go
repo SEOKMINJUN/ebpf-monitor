@@ -77,7 +77,7 @@ type Event struct {
 
 func (u *Event) SetInfo(eventType string, timestamp int64, obj interface{}) {
 	u.TYPE = eventType
-	u.TIMESTAMP = time.Unix(timestamp, 0)
+	u.TIMESTAMP = time.Unix(0, ConvertMonotonicTimeToRealTime(timestamp))
 	u.Data = obj
 }
 
