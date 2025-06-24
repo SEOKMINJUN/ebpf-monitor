@@ -137,6 +137,8 @@ func (u *Event) Handle() {
 				span.SetAttributes(attribute.Int("returncode", (int)(data.RETURNCODE)))
 				span.End(trace.WithTimestamp(u.TIMESTAMP))
 			}
+		} else {
+			ctx = context.Background()
 		}
 
 		record := log.Record{}
@@ -162,6 +164,8 @@ func (u *Event) Handle() {
 					trace.WithAttributes(attribute.Int("mode", (int)(data.MODE))),
 				)
 			}
+		} else {
+			ctx = context.Background()
 		}
 
 		record := log.Record{}
@@ -190,6 +194,8 @@ func (u *Event) Handle() {
 					trace.WithAttributes(attribute.Int("Dest Port", (int)(data.DPORT))),
 				)
 			}
+		} else {
+			ctx = context.Background()
 		}
 
 		record := log.Record{}
@@ -217,6 +223,8 @@ func (u *Event) Handle() {
 				)
 			}
 			fmt.Printf("Create shell trace: %s\n", data.CMD)
+		} else {
+			ctx = context.Background()
 		}
 
 		record := log.Record{}
